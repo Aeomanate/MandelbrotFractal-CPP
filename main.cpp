@@ -297,8 +297,8 @@ struct Zoomer: public sf::Drawable {
         
         axis.cartesian.x.min -= 2*dists.x.min;
         axis.cartesian.x.max += 2*dists.x.max;
-        axis.cartesian.y.min -= 2*dists.y.min;
-        axis.cartesian.y.max += 2*dists.y.max;
+        axis.cartesian.y.min -= 2*dists.y.max;
+        axis.cartesian.y.max += 2*dists.y.min;
     }
     
     Axis& axis;
@@ -494,6 +494,6 @@ class Main {
 };
 
 int main() {
-    Main({1024, 512}, 200, 2, 0.8).mainLoop();
+    Main({1024, 512}, 20, 2, 0.8).mainLoop();
     return 0;
 }
