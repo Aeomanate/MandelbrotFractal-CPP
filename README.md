@@ -19,3 +19,4 @@ I had tryed to use GMP but it way wery slow (or I not understand how to use it i
 ### Usage
 * Mouse wheel to zoom cartesian area 
 * Side mouse buttons to change zoom rectangle
+* Num+ and Num- to change count iterations for compute the fractal 
