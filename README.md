@@ -2,8 +2,11 @@
 Mandelbrot fractal on C++
 
 I made the C++ verion because the Python implementation is very slow. 
-I had notised that continuous zoom was making the image of fractal be noisy.
+
+I had notised that continuous zoom was making the image of fractal be noisy (and I donnow how fix it).
+
 I had tryed to use GMP but it way wery slow (or I not understand how to use it in correct way).
+
 
 ### Used instruments 
 * mingw32-i686-8.1.0-release-posix-dwarf-rt_v6-rev0
