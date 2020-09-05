@@ -1,6 +1,7 @@
 # MandelbrotFractal-CPP
 Mandelbrot fractal on C++
 
+I made the C++ verion because the Python implementation is very slow. 
 I had notised that continuous zoom was making the image of fractal be noisy.
 I had tryed to use GMP but it way wery slow (or I not understand how to use it in correct way).
 
@@ -17,6 +18,6 @@ I had tryed to use GMP but it way wery slow (or I not understand how to use it i
 5. Compile & run 
 
 ### Usage
-* Mouse wheel to zoom cartesian area 
+* Mouse wheel to zoom cartesian area (or LMB/RBM)
 * Side mouse buttons to change zoom rectangle
-* Num+ and Num- to change count iterations for compute the fractal 
+* Num+ and Num- (or space/n) to change count iterations for compute the fractal 
