@@ -67,50 +67,35 @@ struct Borders {
 
 using Real = long double;
 
-template <class From, class To>
-struct Converter {
-    Converter(From const& x): converted(To(x)) { }
-    
-    operator To() const {
-        return converted;
+template <class To, class From>
+To convert(From const& from) {
+    return static_cast<To>(from);
+}
+template<class To>
+To convert(mpf_class const& from) {
+    if constexpr (std::is_same_v<To, sf::Uint8>) {
+        return static_cast<sf::Uint8>(from.get_ui());
+    } else
+    if constexpr (std::is_same_v<To, int>) {
+        return static_cast<int>(from.get_si());
+    } else
+    if constexpr (std::is_same_v<To, float>) {
+        return static_cast<float>(from.get_d());
+    } else
+    if constexpr (std::is_same_v<To, mpf_class>) {
+        return from;
+    } else {
+        throw std::logic_error("Unexpected ConvertTo type");
     }
-    
-    To converted;
-};
-
-template <class To>
-struct Converter<mpf_class, To> {
-    Converter(mpf_class const& x) {
-        if constexpr (std::is_same_v<To, sf::Uint8>) {
-            converted = (sf::Uint8) x.get_ui();
-        } else
-        if constexpr (std::is_same_v<To, int>) {
-            converted = (int) x.get_si();
-        } else
-        if constexpr (std::is_same_v<To, float>) {
-            converted = (float) x.get_d();
-        } else
-        if constexpr (std::is_same_v<To, mpf_class>) {
-            converted = x;
-        } else {
-            throw std::logic_error("Unexpected ConvertTo type");
-        }
-    }
-    
-    operator To() const {
-        return converted;
-    }
-    To converted;
-};
-
+}
 
 template<class In1, class In2>
 In2 linear(In1 value_from, Limits<In1> from, Limits<In2> to) {
-    Real result = ((Real)(value_from) - from.min)
+    Real result = (Real(value_from) - from.min)
                   / (from.max - from.min)
                   * (to.max - to.min)
                   + to.min;
-    return Converter<Real, In2>(result);
+    return convert<In2>(result);
 }
 
 struct DrawableNumber: public sf::Drawable {
@@ -137,7 +122,6 @@ struct DrawableNumber: public sf::Drawable {
         float offset_y = linear(int(pos.y), bounds.y, Limits<float>(0, 1.5f*height));
         text.setPosition(float(pos.x) - offset_x, float(pos.y) - offset_y);
     }
-    
     void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
         target.draw(text, states);
     }
@@ -149,13 +133,10 @@ struct DrawableNumber: public sf::Drawable {
     static inline std::stringstream s{};
 };
 
-
 template <class Ret, class In, class Owner, class Callable = Ret(Owner::*)(In) const>
 struct ShortcutTransformFunctions {
     ShortcutTransformFunctions(Owner* owner, Callable x, Callable y)
-        : owner(owner)
-        , _x(x)
-        , _y(y)
+    : owner(owner), _x(x), _y(y)
     { }
     
     Ret x(In in) const {
@@ -166,6 +147,7 @@ struct ShortcutTransformFunctions {
         return (owner->*_y)(in);
     }
     
+  private:
     Owner* owner;
     Callable _x, _y;
 };
@@ -207,8 +189,7 @@ struct Axis {
 
 struct Zoomer: public sf::Drawable {
     Zoomer(Axis& axis, Real scale_factor)
-    : axis(axis)
-    , scale_factor(scale_factor)
+    : axis(axis), scale_factor(scale_factor)
     {
         zoom_rect.setSize(sf::Vector2f(sf::Vector2i(axis.screen.x.max, axis.screen.y.max)));
         zoom_rect.setOutlineColor(sf::Color(255, 0, 0));
@@ -216,26 +197,6 @@ struct Zoomer: public sf::Drawable {
         zoom_rect.setFillColor(sf::Color::Transparent);
         updateRectSizes();
     }
-    
-    void setPos(sf::Vector2i mouse_pos) {
-        sf::Vector2f size = zoom_rect.getSize();
-        zoom_rect.setPosition(
-            float(mouse_pos.x) - size.x/2,
-            float(mouse_pos.y) - size.y/2
-        );
-    }
-    void shiftScaleFactor(Real variation) {
-        scale_factor += variation;
-        scale_factor = Limits<Real>(0.1, 0.98).clamp(scale_factor);
-        updateRectSizes();
-    }
-    
-    void updateRectSizes() {
-        float x = Converter<Real, float>(scale_factor * axis.screen.x.max);
-        float y = Converter<Real, float>(scale_factor * axis.screen.y.max);
-        zoom_rect.setSize(sf::Vector2f(x, y));
-    }
-    
     void draw(sf::RenderTarget& target, sf::RenderStates states) const override {
         target.draw(zoom_rect, states);
         /*
@@ -265,6 +226,24 @@ struct Zoomer: public sf::Drawable {
         */
     }
     
+    void setPos(sf::Vector2i mouse_pos) {
+        sf::Vector2f size = zoom_rect.getSize();
+        zoom_rect.setPosition(
+            float(mouse_pos.x) - size.x/2,
+            float(mouse_pos.y) - size.y/2
+        );
+    }
+    void shiftScaleFactor(Real variation) {
+        scale_factor += variation;
+        scale_factor = Limits<Real>(0.1, 0.99).clamp(scale_factor);
+        updateRectSizes();
+    }
+    void updateRectSizes() {
+        float x = convert<float>(scale_factor * axis.screen.x.max);
+        float y = convert<float>(scale_factor * axis.screen.y.max);
+        zoom_rect.setSize(sf::Vector2f(x, y));
+    }
+    
     Borders<int> zoomRectCorners() const {
         sf::Vector2i pos(zoom_rect.getPosition());
         sf::Vector2i size(zoom_rect.getSize());
@@ -274,7 +253,6 @@ struct Zoomer: public sf::Drawable {
         );
         return corners;
     }
-    
     void axisCartesianResize() {
         Borders<int> corners = zoomRectCorners();
         Axis prev_axis = Axis(axis);
@@ -284,7 +262,6 @@ struct Zoomer: public sf::Drawable {
         axis.cartesian.y.min = prev_axis.s2c.y(corners.y.max);
         axis.cartesian.y.max = prev_axis.s2c.y(corners.y.min);
     }
-    
     void zoomIn() {
         axisCartesianResize();
     }
@@ -337,6 +314,7 @@ class TaskPool {
         std::unique_lock lock(tasks.m);
         tasks.v.wait(lock, [&] { return !tasks.q.empty() || !is_program_work; });
     }
+    
   private:
     struct {
         std::queue<Task> q;
@@ -345,8 +323,33 @@ class TaskPool {
     } tasks;
 };
 
-template <class Result>
-class Worker {
+template <class Result, class Worker, bool is_not_void>
+class WorkerHelper {
+  public:
+    template <class Task>
+    void runTask(Task task) {
+        finished_work.push_back(std::move(task()));
+    }
+    
+    auto getResults() {
+        if(!static_cast<Worker*>(this)->done())
+            throw std::logic_error("Work not done");
+        return std::move(finished_work);
+    }
+  
+  protected:
+    std::vector<Result> finished_work;
+};
+template <class Result, class Worker>
+class WorkerHelper<Result, Worker, true> {
+  public:
+    template <class Task>
+    void runTask(Task task) {
+        task();
+    }
+};
+template <class Result, bool is_result_void = std::is_same_v<Result, void>>
+class Worker: public WorkerHelper<Result, Worker<Result>, is_result_void> {
   public:
     Worker() { }
     Worker(bool const& is_program_work, TaskPool<Result>& task_pool)
@@ -359,7 +362,7 @@ class Worker {
         while(is_program_work) {
             typename TaskPool<Result>::Task task = task_pool.getTask();
             if(task) {
-                finished_work.push_back(std::move(task()));
+                this->runTask(task);
             } else {
                 done_work = true;
                 task_pool.waitForTasks(is_program_work);
@@ -370,22 +373,17 @@ class Worker {
     void workMain(TaskPool<Result>& task_pool) {
         typename TaskPool<Result>::Task task;
         while(task = task_pool.getTask()) {
-            finished_work.push_back(std::move(task()));
+            this->runTask(task);
         }
         
     }
     bool done() const {
         return done_work;
     }
-    std::vector<Result>&& getResults() {
-        if(!done()) throw std::logic_error("Work not done");
-        return std::move(finished_work);
-    }
     
   private:
     std::thread thread;
     std::atomic<bool> done_work = true;
-    std::vector<Result> finished_work;
 };
 
 template <class Result>
@@ -419,7 +417,8 @@ class ThreadPool {
         }
         return work_done;
     }
-    void handleResults(std::function<void(Result&)> result_handler) {
+    template <class ResultHandler>
+    void handleResults(ResultHandler result_handler) {
         while(!done());
         for(auto& worker: workers) {
             for(auto& result: worker->getResults()) {
@@ -454,7 +453,7 @@ class Fractal: public sf::Drawable {
 template <class TaskTemplate>
 class RowTasks {
   public:
-    RowTasks(TaskTemplate task, int end_row): task(task), end_row(end_row) { }
+    RowTasks(TaskTemplate task, int rows): task(task), rows(rows) { }
   
     RowTasks& operator++() {
         ++cur_row;
@@ -466,26 +465,48 @@ class RowTasks {
         };
     }
     operator bool() {
-        return cur_row != end_row;
+        return cur_row != rows;
     }
     
   private:
     TaskTemplate task;
-    int cur_row = 0, end_row;
+    int cur_row = 0, rows;
 };
-
+template <class TaskTemplate>
+class PixelTasks {
+  public:
+    PixelTasks(TaskTemplate task, int rows, int cols)
+    : task(task), cols(cols), size(rows * cols)
+    { }
+    
+    PixelTasks& operator++() {
+        ++cur;
+        return *this;
+    }
+    auto operator*() {
+        return [py=cur/cols, px=cur%cols, task=task] {
+            return task(py, px);
+        };
+    }
+    operator bool() {
+        return cur != size;
+    }
+  
+  private:
+    TaskTemplate task;
+    int cols, size, cur = 0;
+};
 struct Mandelbrot: public sf::Drawable {
     Mandelbrot(sf::VideoMode screen_sizes, unsigned max_iterations, Real R)
     : R2(R*R)
     , limit_iterations(max_iterations)
-    , amount_iterations(0, limit_iterations)
     {
         fractal.image.create(screen_sizes.width, screen_sizes.height);
     
         sf::Color deep_blue = sf::Color(0, 60, 192);
         sf::Color gold = sf::Color(255, 140, 0);
         for(unsigned i = 0; i != std::size(color_table); ++i) {
-            color_table[i] = iterToColor(i, deep_blue, gold);
+            color_table[i] = iterToColor(i, Limits<unsigned>(0, limit_iterations), deep_blue, gold);
         }
     }
     
@@ -496,7 +517,7 @@ struct Mandelbrot: public sf::Drawable {
         for(unsigned i = 0; i != limit_iterations; ++i) {
             z = Complex {
                 z.re*z.re - z.im*z.im + c.re,
-                z.re*z.im + z.im*z.re + c.im
+                z.re*z.im*2 + c.im
             };
             
             if(z.re*z.re + z.im*z.im > R2) {
@@ -506,15 +527,10 @@ struct Mandelbrot: public sf::Drawable {
         return { true, limit_iterations };
     }
     
-    Limits<unsigned> updateT1(Axis const& axis) {
-        auto cur_iter = Limits<unsigned>(amount_iterations.max, amount_iterations.min);
+    void updateT1(Axis const& axis) {
         for(int py = 0; py != axis.screen.y.max; ++py) {
             for(int px = 0; px != axis.screen.x.max; ++px) {
                 auto [in_set, iter] = isInSet(axis.s2c.x(px), axis.s2c.y(py));
-                if(in_set) {
-                    cur_iter.max = std::max(cur_iter.max, iter);
-                    cur_iter.min = std::min(cur_iter.min, iter);
-                }
                 fractal.image.setPixel(
                     unsigned(px), unsigned(py),
                     in_set ? sf::Color(0, 0, 0)
@@ -522,58 +538,55 @@ struct Mandelbrot: public sf::Drawable {
                 );
             }
         }
-        return cur_iter;
     }
-    Limits<unsigned> updateT8(Axis const& axis) {
+    void updateT8Rows(Axis const& axis) {
         auto task = [this, &axis] (int py) {
-            auto iters_in_row = Limits<unsigned>(
-                amount_iterations.max, amount_iterations.min
-            );
             for(int px = 0; px != axis.screen.x.max; ++px) {
-                auto[in_set, iter] = isInSet(
-                    axis.s2c.x(px), axis.s2c.y(py)
-                );
-                if(in_set) {
-                    iters_in_row.max = std::max(iters_in_row.max, iter);
-                    iters_in_row.min = std::min(iters_in_row.min, iter);
-                }
+                auto[in_set, iter] = isInSet(axis.s2c.x(px), axis.s2c.y(py));
                 fractal.image.setPixel(
                     unsigned(px), unsigned(py),
                     in_set ? sf::Color(0, 0, 0)
                            : color_table[iter % std::size(color_table)]
                 );
             }
-            return iters_in_row;
         };
         thread_pool.addTasks(RowTasks<decltype(task)>(task, axis.screen.y.max));
         thread_pool.joinMainToWorkers();
+    }
+    void updateT8Pixels(Axis const& axis) {
+        auto task = [this, &axis] (int py, int px) {
+            auto[in_set, iter] = isInSet(axis.s2c.x(px), axis.s2c.y(py));
+            fractal.image.setPixel(
+                unsigned(px), unsigned(py),
+                in_set ? sf::Color(0, 0, 0)
+                       : color_table[iter % std::size(color_table)]
+            );
         
-        auto result_iters = Limits<unsigned>(
-            amount_iterations.max, amount_iterations.min
-        );
-        thread_pool.handleResults([&] (Limits<unsigned> const& iters_in_row) {
-            result_iters.combine(iters_in_row);
-        });
-        return result_iters;
+        };
+        thread_pool.addTasks(PixelTasks<decltype(task)>(task, axis.screen.y.max, axis.screen.x.max));
+        thread_pool.joinMainToWorkers();
     }
     
     void update(Axis const& axis) {
         /*
-        auto a = std::chrono::steady_clock::now();
-        amount_iterations = updateT1(axis);
-        auto b = std::chrono::steady_clock::now();
-        auto mcs_a = std::chrono::duration_cast<std::chrono::milliseconds>(b - a).count();
-        */
-        // a = std::chrono::steady_clock::now();
-        amount_iterations = updateT8(axis);
-        // b = std::chrono::steady_clock::now();
-        // auto mcs_b = std::chrono::duration_cast<std::chrono::milliseconds>(b - a).count();
+        auto check_speed = [] (auto f) {
+            auto a = std::chrono::steady_clock::now();
+            f();
+            auto b = std::chrono::steady_clock::now();
+            return std::chrono::duration_cast<std::chrono::milliseconds>(b - a).count();
+        };
+        
+        auto ta = check_speed([&] { updateT1(axis); });
+        auto tb = check_speed([&] { updateT8Rows(axis); });
+        auto tc = check_speed([&] { updateT8Pixels(axis); });
     
-        /*
-        std::cout << "T1: " << mcs_a << " " << "T8: " << mcs_a << " "
-                  << "Diff (T1-T8) by: " << mcs_a - mcs_b << " "
-                  << "Diff (T1/T8) times: " << double(mcs_a)/double(mcs_b) << "\n";
+        std::cout
+        << std::left
+        << std::setw(15) << "(T1/T8): " + std::to_string(ta/tb) + ","
+        << std::setw(15) << "(T1/T8r): " + std::to_string(ta/tc) + ","
+        << std::setw(15) << "(T8/T8p): " + std::to_string(tb/tc) << "\n";
         */
+        updateT8Rows(axis);
         fractal.updateSprite();
     }
     
@@ -586,22 +599,21 @@ struct Mandelbrot: public sf::Drawable {
         target.draw(fractal, states);
     }
     
-    sf::Uint8 iterToChannel(unsigned iter, Limits<sf::Uint8> color_channel) {
+    sf::Uint8 iterToChannel(unsigned iter, Limits<unsigned> amount_iterations, Limits<sf::Uint8> color_channel) {
         return linear(iter, amount_iterations, color_channel);
     }
-    sf::Color iterToColor(unsigned iter, sf::Color min, sf::Color max) {
-        sf::Uint8 r = iterToChannel(iter, { min.r, max.r });
-        sf::Uint8 g = iterToChannel(iter, { min.g, max.g });
-        sf::Uint8 b = iterToChannel(iter, { min.b, max.b });
+    sf::Color iterToColor(unsigned iter, Limits<unsigned> amount_iterations, sf::Color min, sf::Color max) {
+        sf::Uint8 r = iterToChannel(iter, amount_iterations, { min.r, max.r });
+        sf::Uint8 g = iterToChannel(iter, amount_iterations, { min.g, max.g });
+        sf::Uint8 b = iterToChannel(iter, amount_iterations, { min.b, max.b });
         return sf::Color { r, g, b };
     }
     
     Real R2;
     unsigned limit_iterations;
-    Limits<unsigned> amount_iterations;
     sf::Color color_table[40];
     Fractal fractal;
-    ThreadPool<Limits<unsigned>> thread_pool;
+    ThreadPool<void> thread_pool;
 };
 
 class Main {
@@ -637,12 +649,12 @@ class Main {
                     break;
                     
                 case sf::Event::EventType::KeyPressed:
-                    if(e.key.code == sf::Keyboard::Space) {
+                    if(e.key.code == sf::Keyboard::Space || e.key.code == sf::Keyboard::Add) {
                         mandelbrot.shiftMaxIteration(+50);
                         is_need_recalc = true;
                     }
-                    else if(e.key.code == sf::Keyboard::N) {
-                        mandelbrot.shiftMaxIteration(-1);
+                    else if(e.key.code == sf::Keyboard::N || e.key.code == sf::Keyboard::Subtract) {
+                        mandelbrot.shiftMaxIteration(-10);
                         is_need_recalc = true;
                     }
                     break;
@@ -651,11 +663,12 @@ class Main {
                     if(e.mouseButton.button == sf::Mouse::Button::Left) {
                         mandelbrot.shiftMaxIteration(+2);
                         zoomer.zoomIn();
+                        is_need_recalc = true;
                     } else if(e.mouseButton.button == sf::Mouse::Button::Right) {
-                        mandelbrot.shiftMaxIteration(-2);
+                        mandelbrot.shiftMaxIteration(-1);
                         zoomer.zoomOut(sf::Mouse::getPosition(window));
+                        is_need_recalc = true;
                     }
-                    is_need_recalc = true;
                     break;
                 
                 case sf::Event::EventType::MouseButtonReleased:
@@ -666,7 +679,7 @@ class Main {
                         mandelbrot.shiftMaxIteration(+2);
                         zoomer.zoomIn();
                     } else {
-                        mandelbrot.shiftMaxIteration(-2);
+                        mandelbrot.shiftMaxIteration(-1);
                         zoomer.zoomOut(sf::Mouse::getPosition(window));
                     }
                     is_need_recalc = true;
@@ -794,7 +807,7 @@ void testMultiThreading() {
         } else if(digit == '0') {
             thread_pool.joinMainToWorkers();
             setCursor(3 * 7 + 1, 0);
-            thread_pool.handleResults([](std::vector<byte> const& r) {
+            thread_pool.handleResults([](std::vector<byte>& r) {
                 for(byte x: r) {
                     std::cout << bool(x) << ' ';
                 }
@@ -809,6 +822,6 @@ void testMultiThreading() {
 
 int main() {
     // testMultiThreading();
-    Main({1024, 512}, 20, 2, 0.8).mainLoop();
+    Main({1024, 768}, 20, 2, 0.8).mainLoop();
     return 0;
 }
