@@ -1,6 +1,7 @@
-cmake_minimum_required(VERSION 3.13)
+cmake_minimum_required(VERSION 3.16)
 project(Mandelbrot_CPP)
 
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Executable/bin)
 set(CMAKE_CXX_FLAGS
     "${CMAKE_CXX_FLAGS} \
         -std=gnu++2a \
@@ -10,11 +11,9 @@ set(CMAKE_CXX_FLAGS
          \
         -Wconversion \
         -Wenum-compare \
-        -Wfloat-equal \
         -Woverloaded-virtual \
     "
     )
-
 set(STATIC_BUILD TRUE)
 if (CMAKE_BUILD_TYPE MATCHES Release)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
@@ -25,29 +24,49 @@ if (STATIC_BUILD)
     set(CMAKE_EXE_LINKER_FLAGS "-static -static-libgcc")
 endif ()
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/Executable/bin)
-set(ENV_ROOT "D:/Programms/ProgrammingEnvironment")
+option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 
+
+include(FetchContent)
+FetchContent_Declare(SFML
+        GIT_REPOSITORY https://github.com/SFML/SFML.git
+        GIT_TAG 2.6.x)
+FetchContent_MakeAvailable(SFML)
 
 add_executable(${PROJECT_NAME}
-    main.cpp
+        src/main.cpp
+        src/Multithreading/ThreadPool.h
+        src/DebugTools/DebugTools.cpp
+        src/DebugTools/DebugTools.h
+        src/Utility/Types.h
+        src/Utility/Functions.h
+        src/MainWindow.cpp
+        src/MainWindow.h
+        src/Fractal/MandelbrotFractal.cpp
+        src/Fractal/MandelbrotFractal.h
+        src/Fractal/TaskIterators.h
+        src/Fractal/Zoomer.cpp
+        src/Fractal/Zoomer.h
+        src/Utility/Types.cpp
+        src/Fractal/Config.h
+        src/Fractal/FractalCalcMethods.cpp
+        src/Fractal/FractalCalcMethods.h
+        src/Multithreading/ThreadPoolInstance.h
 
-    )
+)
 
-
-set(SFML_ROOT "${ENV_ROOT}/Librares/SFML-2.5.1")
-set(SFML_STATIC_LIBRARIES ${STATIC_BUILD})
-set(SFML_DIR "${SFML_ROOT}/lib/cmake/SFML")
-find_package(SFML 2.5 COMPONENTS graphics REQUIRED)
+set(ENV_ROOT "D:/Prog/Env")
+set(SFML_SOURCE_DIR "${ENV_ROOT}/Libraries/SFML-2.6.1-64")
 target_link_libraries(${PROJECT_NAME} sfml-graphics sfml-window sfml-system)
+target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
 
+add_custom_command(
+        TARGET ${PROJECT_NAME}
+        COMMENT "Copy font"
+        PRE_BUILD COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/resources/arial.ttf $<TARGET_FILE_DIR:${PROJECT_NAME}>
+        VERBATIM)
 
-set(GMP_DIR "${ENV_ROOT}/Librares/gmp-6.1.1")
-include_directories(${PROJECT_NAME} ${GMP_DIR}/include)
-target_link_libraries(${PROJECT_NAME}
-    "${GMP_DIR}/lib/libgmp.dll.a"
-    "${GMP_DIR}/lib/libgmpxx.dll.a"
-    )
+install(TARGETS ${PROJECT_NAME})
 
 
 
