@@ -61,8 +61,19 @@ private:
     std::condition_variable condition_variable;
 };
 
-template<class Result, class Worker, bool is_not_void>
+template<class Result, class Worker, bool is_result_void>
 class WorkerHelper
+{
+public:
+    template<class Task>
+    void runTask(Task task)
+    {
+        task();
+    }
+};
+
+template<class Result, class Worker>
+class WorkerHelper<Result, Worker, false>
 {
 public:
     template<class Task>
@@ -79,20 +90,8 @@ public:
         }
         return std::move(finished_work);
     }
-
 protected:
     std::vector<Result> finished_work;
-};
-
-template<class Result, class Worker>
-class WorkerHelper<Result, Worker, true>
-{
-public:
-    template<class Task>
-    void runTask(Task task)
-    {
-        task();
-    }
 };
 
 template<class Result, bool is_result_void = std::is_same_v<Result, void>>
@@ -100,33 +99,16 @@ class Worker : public WorkerHelper<Result, Worker<Result>, is_result_void>
 {
 public:
     Worker() = default;
+    Worker(const Worker&) = delete;
 
     Worker(bool const& is_program_work, TaskPool<Result>& task_pool)
-        : thread(&Worker::work, this, std::ref(is_program_work), std::ref(task_pool))
+        : thread(&Worker::workParallel, this, std::ref(is_program_work), std::ref(task_pool))
     { }
 
     ~Worker()
     {
         if (thread.joinable())
         { thread.join(); }
-    }
-
-    void work(bool const& is_program_work, TaskPool<Result>& task_pool)
-    {
-        while (is_program_work)
-        {
-            typename TaskPool<Result>::CallableTask task = task_pool.getTask();
-            if (task)
-            {
-                this->runTask(task);
-            }
-            else
-            {
-                done_work = true;
-                task_pool.waitForTasks(is_program_work);
-                done_work = false;
-            }
-        }
     }
 
     void workMain(TaskPool<Result>& task_pool)
@@ -145,21 +127,40 @@ public:
     }
 
 private:
+    void workParallel(bool const& is_program_work, TaskPool<Result>& task_pool)
+    {
+        while (is_program_work)
+        {
+            typename TaskPool<Result>::CallableTask task = task_pool.getTask();
+            if (task)
+            {
+                this->runTask(task);
+            }
+            else
+            {
+                done_work = true;
+                task_pool.waitForTasks(is_program_work);
+                done_work = false;
+            }
+        }
+    }
+
+private:
     std::thread thread;
     std::atomic<bool> done_work = true;
 };
 
-template<class TaskResult>
+template<class TaskResultT>
 class ThreadPool
 {
+    using WorkerT = Worker<TaskResultT>;
 public:
     ThreadPool()
     {
         for (size_t i = 0; i != std::thread::hardware_concurrency() - 1; ++i)
         {
-            workers.push_back(std::make_unique<Worker<TaskResult>>(is_program_work, task_pool));
+            workers.push_back(std::make_unique<WorkerT>(is_program_work, task_pool));
         }
-        workers.push_back(std::make_unique<Worker<TaskResult>>());
     }
 
     ~ThreadPool()
@@ -181,13 +182,13 @@ public:
 
     void joinMainToWorkers()
     {
-        workers.back()->workMain(task_pool);
+        worker_from_main_thread.workMain(task_pool);
     }
 
     bool IsWorkDone()
     {
         bool work_done = task_pool.isEmpty();
-        for (std::unique_ptr<Worker<TaskResult>> const& w: workers)
+        for (std::unique_ptr<Worker<TaskResultT>> const& w: workers)
         {
             if (work_done &= w->done(); !work_done)
             {
@@ -213,8 +214,9 @@ public:
 
 private:
     bool is_program_work = true;
-    TaskPool<TaskResult> task_pool;
-    std::vector<std::unique_ptr<Worker<TaskResult>>> workers;
+    TaskPool<TaskResultT> task_pool;
+    std::vector<std::unique_ptr<WorkerT>> workers;
+    Worker<TaskResultT> worker_from_main_thread;
 };
 
 #endif //MANDELBROT_CPP_THREADPOOL_H
