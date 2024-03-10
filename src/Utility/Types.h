@@ -4,6 +4,7 @@
 #include <gmpxx.h>
 #include <SFML/Graphics.hpp>
 #include <chrono>
+#include <cmath>
 #include "Functions.h"
 
 using Real = long double;
@@ -37,10 +38,7 @@ struct MinMax
     template<class U>
     U lerp(T value_from, MinMax<U> to_range) const
     {
-        Real result = (Real(value_from) - this->min)
-            / (this->max - this->min)
-            * (to_range.max - to_range.min)
-            + to_range.min;
+        Real result = std::lerp(to_range.min, to_range.max, (Real(value_from) - this->min) / (this->max - this->min));
         return convert<U>(result);
     }
 
